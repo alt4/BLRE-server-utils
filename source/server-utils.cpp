@@ -40,12 +40,17 @@ struct ServerProperties {
 	int GoalScore;
 };
 
+struct ServerControl {
+	std::string rconPassword;
+};
+
 struct ServerHacks {
 	bool disableOnMatchIdle;
 };
 
 struct ServerConfig {
 	ServerProperties properties;
+	ServerControl control;
 	ServerHacks hacks;
 
 	char RandomBotNamesFString[NUM_BOT_NAMES * sizeof(FString)];
@@ -66,7 +71,8 @@ static void restoreBotnamesToGameDefault(const ServerConfig &config);
 static void applyOneshotHacks(const ServerConfig &config);
 static void applyRecurringHacks(AFoxGame *game, const ServerConfig &config);
 static void cacheServerInfo();
-static void getRequestHandler(const httplib::Request &req, httplib::Response &res);
+static void getInfoRequestHandler(const httplib::Request &req, httplib::Response &res);
+static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res);
 static void writeServerInfo();
 static void updateServerInfo(AFoxGame* game);
 static void threadLoop();
@@ -176,8 +182,10 @@ extern "C" __declspec(dllexport) void InitializeModule(Module::InitData *data)
 
 	// handle get requests
 	data->Server->AddConnectionHandler(Network::RequestType::GET, "/server_info", [&](const httplib::Request &req, httplib::Response &res)
-								 { getRequestHandler(req, res); });
-
+								 { getInfoRequestHandler(req, res); });
+	
+	data->Server->AddConnectionHandler(Network::RequestType::GET, "/server_control", [&](const httplib::Request& req, httplib::Response& res)
+								 { getControlRequestHandler(req, res); });
 
     // initialize your module
 }
@@ -272,6 +280,8 @@ static json defaultConfigJson(){
 	defaultConfig["properties"]["TimeLimit"] = 10;
 	defaultConfig["properties"]["GoalScore"] = 3000;
 
+	defaultConfig["control"]["rconPassword"] = "NotFoxAdmin";
+
 	defaultConfig["hacks"]["disableOnMatchIdle"] = 1;
 	return defaultConfig;
 }
@@ -317,6 +327,8 @@ static ServerConfig serverConfigFromJson(json input){
 		config.properties.PlayerSearchTime = getJsonValue(input, defaultConfig, "properties", "PlayerSearchTime");
 		config.properties.TimeLimit = getJsonValue(input, defaultConfig, "properties", "TimeLimit");
 		config.properties.GoalScore = getJsonValue(input, defaultConfig, "properties", "GoalScore");
+
+		config.control.rconPassword = getJsonValue(input, defaultConfig, "control", "rconPassword");
 
 		config.hacks.disableOnMatchIdle = (int)getJsonValue(input, defaultConfig, "hacks", "disableOnMatchIdle");
 	}catch(json::exception e){
@@ -389,7 +401,7 @@ static void cacheServerInfo(){
 	ReleaseMutex(serverInfoCacheMutex);
 }
 
-static void getRequestHandler(const httplib::Request &req, httplib::Response &res){
+static void getInfoRequestHandler(const httplib::Request &req, httplib::Response &res){
 	WaitForSingleObject(serverInfoCacheMutex, INFINITE);
 	std::string outputString = serverInfoHTTPCache;
 	ReleaseMutex(serverInfoCacheMutex);
@@ -397,6 +409,26 @@ static void getRequestHandler(const httplib::Request &req, httplib::Response &re
 	// this might change in proxy, it does look like HandlerResponse::Unhandled and HandlerResponse::Handled were flipped
 	res.status = 200;
 	res.set_content(outputString, "application/json");
+}
+
+static bool checkControlAuth(std::string authHeaderContent) {
+	// Super ghetto RFC 7617 compliant (almost) Basic auth method since I didn't find one in httplib
+	// and there's likely never gonna be one https://github.com/yhirose/cpp-httplib/issues/375
+	// Would likely better be handled at the proxy level..?
+	std::string rconPassword = "blrevive:temp";
+	std::string expectedHeader = httplib::detail::base64_encode(rconPassword);
+	return (authHeaderContent == std::format("Basic {0}", expectedHeader));
+}
+
+static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res) {
+	std::string authHeaderContent = req.get_header_value("Authorization");
+	if (checkControlAuth(authHeaderContent)) {
+		res.status = 200;
+		res.set_content("Cool :)", "text/plain");
+	} else {
+		res.status = 401;
+		res.set_header("WWW-Authenticate", "Basic realm=\"don't set one or it breaks\"");
+	}
 }
 
 static void writeServerInfo(){
