@@ -72,7 +72,7 @@ static void applyOneshotHacks(const ServerConfig &config);
 static void applyRecurringHacks(AFoxGame *game, const ServerConfig &config);
 static void cacheServerInfo();
 static void getInfoRequestHandler(const httplib::Request &req, httplib::Response &res);
-static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res);
+static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res, const ServerConfig &config);
 static void writeServerInfo();
 static void updateServerInfo(AFoxGame* game);
 static void threadLoop();
@@ -183,9 +183,12 @@ extern "C" __declspec(dllexport) void InitializeModule(Module::InitData *data)
 	// handle get requests
 	data->Server->AddConnectionHandler(Network::RequestType::GET, "/server_info", [&](const httplib::Request &req, httplib::Response &res)
 								 { getInfoRequestHandler(req, res); });
-	
+
+	// I don't know how to handle passing the rcon password to the control handler better than calling it again here...
+	serverConfig = serverConfigFromFile();
+
 	data->Server->AddConnectionHandler(Network::RequestType::GET, "/server_control", [&](const httplib::Request& req, httplib::Response& res)
-								 { getControlRequestHandler(req, res); });
+								 { getControlRequestHandler(req, res, serverConfig); });
 
     // initialize your module
 }
@@ -411,18 +414,17 @@ static void getInfoRequestHandler(const httplib::Request &req, httplib::Response
 	res.set_content(outputString, "application/json");
 }
 
-static bool checkControlAuth(std::string authHeaderContent) {
+static bool checkControlAuth(std::string rconPassword, std::string authHeaderContent) {
 	// Super ghetto RFC 7617 compliant (almost) Basic auth method since I didn't find one in httplib
 	// and there's likely never gonna be one https://github.com/yhirose/cpp-httplib/issues/375
 	// Would likely better be handled at the proxy level..?
-	std::string rconPassword = "blrevive:temp";
-	std::string expectedHeader = httplib::detail::base64_encode(rconPassword);
-	return (authHeaderContent == std::format("Basic {0}", expectedHeader));
+	std::string rconString = std::format(":{0}", rconPassword);
+	return (authHeaderContent == std::format("Basic {0}", httplib::detail::base64_encode(rconString)));
 }
 
-static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res) {
+static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res, const ServerConfig &config) {
 	std::string authHeaderContent = req.get_header_value("Authorization");
-	if (checkControlAuth(authHeaderContent)) {
+	if (checkControlAuth(config.control.rconPassword, authHeaderContent)) {
 		res.status = 200;
 		res.set_content("Cool :)", "text/plain");
 	} else {
