@@ -72,7 +72,7 @@ static void applyOneshotHacks(const ServerConfig &config);
 static void applyRecurringHacks(AFoxGame *game, const ServerConfig &config);
 static void cacheServerInfo();
 static void getInfoRequestHandler(const httplib::Request &req, httplib::Response &res);
-static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res, const ServerConfig &config);
+static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res, const std::string rconPassword);
 static void writeServerInfo();
 static void updateServerInfo(AFoxGame* game);
 static void threadLoop();
@@ -184,11 +184,11 @@ extern "C" __declspec(dllexport) void InitializeModule(Module::InitData *data)
 	data->Server->AddConnectionHandler(Network::RequestType::GET, "/server_info", [&](const httplib::Request &req, httplib::Response &res)
 								 { getInfoRequestHandler(req, res); });
 
-	// I don't know how to handle passing the rcon password to the control handler better than calling it again here...
+	// I don't know how to handle passing the rcon password to the control handlers better than calling it again here...
 	serverConfig = serverConfigFromFile();
 
-	data->Server->AddConnectionHandler(Network::RequestType::GET, "/server_control", [&](const httplib::Request& req, httplib::Response& res)
-								 { getControlRequestHandler(req, res, serverConfig); });
+	data->Server->AddConnectionHandler(Network::RequestType::GET, "/server_control/.*", [&](const httplib::Request& req, httplib::Response& res)
+								 { getControlRequestHandler(req, res, serverConfig.control.rconPassword); });
 
     // initialize your module
 }
@@ -331,6 +331,7 @@ static ServerConfig serverConfigFromJson(json input){
 		config.properties.TimeLimit = getJsonValue(input, defaultConfig, "properties", "TimeLimit");
 		config.properties.GoalScore = getJsonValue(input, defaultConfig, "properties", "GoalScore");
 
+		// TODO: Add "disable" setting
 		config.control.rconPassword = getJsonValue(input, defaultConfig, "control", "rconPassword");
 
 		config.hacks.disableOnMatchIdle = (int)getJsonValue(input, defaultConfig, "hacks", "disableOnMatchIdle");
@@ -412,25 +413,6 @@ static void getInfoRequestHandler(const httplib::Request &req, httplib::Response
 	// this might change in proxy, it does look like HandlerResponse::Unhandled and HandlerResponse::Handled were flipped
 	res.status = 200;
 	res.set_content(outputString, "application/json");
-}
-
-static bool checkControlAuth(std::string rconPassword, std::string authHeaderContent) {
-	// Super ghetto RFC 7617 compliant (almost) Basic auth method since I didn't find one in httplib
-	// and there's likely never gonna be one https://github.com/yhirose/cpp-httplib/issues/375
-	// Would likely better be handled at the proxy level..?
-	std::string rconString = std::format(":{0}", rconPassword);
-	return (authHeaderContent == std::format("Basic {0}", httplib::detail::base64_encode(rconString)));
-}
-
-static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res, const ServerConfig &config) {
-	std::string authHeaderContent = req.get_header_value("Authorization");
-	if (checkControlAuth(config.control.rconPassword, authHeaderContent)) {
-		res.status = 200;
-		res.set_content("Cool :)", "text/plain");
-	} else {
-		res.status = 401;
-		res.set_header("WWW-Authenticate", "Basic realm=\"don't set one or it breaks\"");
-	}
 }
 
 static void writeServerInfo(){
@@ -576,4 +558,39 @@ static void applyOneshotHacks(const ServerConfig &config){
 
 static void applyRecurringHacks(AFoxGame *game, const ServerConfig &config){
 	// place holder
+}
+
+static bool checkControlAuth(const std::string rconPassword, const std::string authHeaderContent) {
+	// Super ghetto (almost) RFC 7617 compliant Basic auth method since I didn't find one in httplib
+	// and there's likely never gonna be one https://github.com/yhirose/cpp-httplib/issues/375
+	// Would likely better be handled at the proxy level..?
+	std::string rconString = std::format(":{0}", rconPassword);
+	return (authHeaderContent == std::format("Basic {0}", httplib::detail::base64_encode(rconString)));
+}
+
+static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res, const std::string rconPassword) {
+	std::smatch commandMatches;
+	// matches anything between /server_control/ and the first ? or /
+	std::regex commandRegex("\\/server_control\\/([a-zA-Z0-9]*)(?:/?|\\??.*)$");
+	std::regex_search(req.path, commandMatches, commandRegex);
+	std::string command = commandMatches[1];
+
+	std::string authHeaderContent = req.get_header_value("Authorization");
+	if (checkControlAuth(rconPassword, authHeaderContent)) {
+		if (command == std::format("test")) {
+			logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
+			res.status = 200;
+			res.set_content(req.get_param_value("options"), "text/plain");
+		}
+		else {
+			logWarn(std::format("Client {0} hit endpoint {1} but it does not exist", req.remote_addr, command));
+			res.status = 501;
+			res.set_content(std::format("Command {0} doesn't exist in this server-util version", command), "text/plain");
+		}
+	}
+	else {
+		logWarn(std::format("Client {0} hit endpoint {1} but failed to authenticate", req.remote_addr, command));
+		res.status = 401;
+		res.set_header("WWW-Authenticate", "Basic realm=\"don't set one or it breaks\"");
+	}
 }
