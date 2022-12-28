@@ -576,21 +576,24 @@ static void getControlRequestHandler(const httplib::Request& req, httplib::Respo
 	std::string command = commandMatches[1];
 
 	std::string authHeaderContent = req.get_header_value("Authorization");
-	if (checkControlAuth(rconPassword, authHeaderContent)) {
-		if (command == std::format("test")) {
-			logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
-			res.status = 200;
-			res.set_content(req.get_param_value("options"), "text/plain");
-		}
-		else {
-			logWarn(std::format("Client {0} hit endpoint {1} but it does not exist", req.remote_addr, command));
-			res.status = 501;
-			res.set_content(std::format("Command {0} doesn't exist in this server-util version", command), "text/plain");
-		}
-	}
-	else {
+	if (!checkControlAuth(rconPassword, authHeaderContent)) {
 		logWarn(std::format("Client {0} hit endpoint {1} but failed to authenticate", req.remote_addr, command));
 		res.status = 401;
-		res.set_header("WWW-Authenticate", "Basic realm=\"don't set one or it breaks\"");
+		res.set_header("WWW-Authenticate", "Basic realm=\"blrevive\"");
+		return;
+	}
+
+	if (command == std::format("test")) {
+		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
+		res.status = 200;
+		res.set_content(req.get_param_value("options"), "text/plain");
+	} else if (command == std::format("killall")) {
+		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
+		res.status = 200;
+	}
+	else {
+		logWarn(std::format("Client {0} hit endpoint {1} but it does not exist", req.remote_addr, command));
+		res.status = 501;
+		res.set_content(std::format("Command {0} doesn't exist in this server-util version", command), "text/plain");
 	}
 }
