@@ -563,15 +563,15 @@ static void applyRecurringHacks(AFoxGame *game, const ServerConfig &config){
 static bool checkControlAuth(const std::string rconPassword, const std::string authHeaderContent) {
 	// Super ghetto (almost) RFC 7617 compliant Basic auth method since I didn't find one in httplib
 	// and there's likely never gonna be one https://github.com/yhirose/cpp-httplib/issues/375
-	// Would likely better be handled at the proxy level..?
 	std::string rconString = std::format(":{0}", rconPassword);
 	return (authHeaderContent == std::format("Basic {0}", httplib::detail::base64_encode(rconString)));
 }
 
 static void getControlRequestHandler(const httplib::Request& req, httplib::Response& res, const std::string rconPassword) {
 	std::smatch commandMatches;
-	// matches anything between /server_control/ and the first ? or /
-	std::regex commandRegex("\\/server_control\\/([a-zA-Z0-9]*)(?:/?|\\??.*)$");
+	// matches any char/num/_ between /server_control/ and the first ? or /
+	// https://regex101.com/r/kFdcfz/2
+	std::regex commandRegex("\\/server_control\\/([a-zA-Z0-9_]*)(?:\\/?|\\??.*)$");
 	std::regex_search(req.path, commandMatches, commandRegex);
 	std::string command = commandMatches[1];
 
@@ -583,17 +583,226 @@ static void getControlRequestHandler(const httplib::Request& req, httplib::Respo
 		return;
 	}
 
-	if (command == std::format("test")) {
+	// I'd use an object to handle the request and its arguments but I'm sorta out of my depth here unfortunately
+	// Result is very (silent?) crash-bound if unexpected values are provided and I don't see an easy way
+	// to check the arguments' type/value/whatever without piling on ifs
+
+	// Ideally I'd add an option to persist settings (i.e. 'permanent=true' to all commands) for the entire server
+	// run (without em surviving a restart though). Handlers perhaps?
+	if (command == std::format("set_next_map")) {
 		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
-		res.status = 200;
-		res.set_content(req.get_param_value("options"), "text/plain");
-	} else if (command == std::format("killall")) {
-		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
-		res.status = 200;
+		/*
+		* TODO: Add a way to get the index from map name. Mildly scuffed python way:
+		*
+		* desired_map = 'Piledriver'
+		*
+		* for i in range(999):
+		*   if str(SDK.UObject.GetInstanceOf[SDK.UFoxDataStore_MenuItems]().eventGetMapNameByIndex(i)) == None:
+		*	  break
+		*	elif desired_map == str(SDK.UObject.GetInstanceOf[SDK.UFoxDataStore_MenuItems]().eventGetMapNameByIndex(i)):
+		*     test = i
+		*     break
+		* 
+		* There's also UFoxDataStore_MenuItems::eventGetMapIndex ( struct FString MapName )
+		* but I get -1 returns for some reason
+		*/
+		unsigned char map_index = req.get_param_value("map_index")[0];
+
+		if (!(map_index)) {
+			logDebug(std::format("Error: missing \"map_index\" argument"));
+			res.status = 400;
+			res.set_content("No map index was provided", "text/plain");
+			return;
+		}
+
+		AFoxGame* foxGame = UObject::GetInstanceOf<AFoxGame>();
+		if (foxGame) {
+			foxGame->FGRI->NextMapIndex = map_index;
+			res.status = 200;
+			res.set_content("OK", "text/plain");
+			return;
+		}
+
+		else {
+			logWarn("No instance of AFoxGame was found");
+			res.status = 500;
+			res.set_content("No instance of AFoxGame was found", "text/plain");
+			return;
+		}
 	}
+
+	if (command == std::format("set_time_left")) {
+		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
+		int seconds = std::stoi(req.get_param_value("seconds"));
+
+		if (!(seconds)) {
+			logDebug(std::format("Error: missing \"seconds\" argument"));
+			res.status = 400;
+			res.set_content("Error: missing \"seconds\" argument", "text/plain");
+			return;
+		}
+
+		AFoxGame* foxGame = UObject::GetInstanceOf<AFoxGame>();
+		if (foxGame) {
+			foxGame->FGRI->RemainingTime = seconds;
+			res.status = 200;
+			res.set_content("OK", "text/plain");
+			return;
+		}
+
+		else {
+			logWarn("No instance of AFoxGame was found");
+			res.status = 500;
+			res.set_content("No instance of AFoxGame was found", "text/plain");
+			return;
+		}
+	}
+
+	if (command == std::format("set_num_bots")) {
+		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
+		int num_bots = std::stoi(req.get_param_value("num_bots"));
+
+		if (!(num_bots)) {
+			logDebug(std::format("Error: missing \"num_bots\" argument"));
+			res.status = 400;
+			res.set_content("Error: missing \"num_bots\" argument", "text/plain");
+			return;
+		}
+
+		AFoxGame* foxGame = UObject::GetInstanceOf<AFoxGame>();
+		if (foxGame) {
+			foxGame->SetNumBots(num_bots);
+			res.status = 200;
+			res.set_content("OK", "text/plain");
+			return;
+		}
+
+		else {
+			logWarn("No instance of AFoxGame was found");
+			res.status = 500;
+			res.set_content("No instance of AFoxGame was found", "text/plain");
+			return;
+		}
+	}
+
+	if (command == std::format("set_health_modifier")) {
+		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
+		float modifier = std::stoi(req.get_param_value("modifier"));
+
+		if (!(modifier)) {
+			logDebug(std::format("Error: missing \"modifier\" argument"));
+			res.status = 400;
+			res.set_content("Error: missing \"modifier\" argument", "text/plain");
+			return;
+		}
+
+		AFoxGame* foxGame = UObject::GetInstanceOf<AFoxGame>();
+		if (foxGame) {
+			foxGame->FGRI->HealthModifier = modifier;
+			res.status = 200;
+			res.set_content("OK", "text/plain");
+			return;
+		}
+
+		else {
+			logWarn("No instance of AFoxGame was found");
+			res.status = 500;
+			res.set_content("No instance of AFoxGame was found", "text/plain");
+			return;
+		}
+	}
+
+	if (command == std::format("set_stamina_modifier")) {
+		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
+		float modifier = std::stoi(req.get_param_value("modifier"));
+
+		if (!(modifier)) {
+			logDebug(std::format("Error: missing \"modifier\" argument"));
+			res.status = 400;
+			res.set_content("Error: missing \"modifier\" argument", "text/plain");
+			return;
+		}
+
+		AFoxGame* foxGame = UObject::GetInstanceOf<AFoxGame>();
+		if (foxGame) {
+			foxGame->FGRI->StaminaModifier = modifier;
+			res.status = 200;
+			res.set_content("OK", "text/plain");
+			return;
+		}
+
+		else {
+			logWarn("No instance of AFoxGame was found");
+			res.status = 500;
+			res.set_content("No instance of AFoxGame was found", "text/plain");
+			return;
+		}
+	}
+
+	/*
+	if (command == std::format("kick")) {
+		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
+		std::string name = req.get_param_value("player_name");
+
+		if (name.empty()) {
+			logDebug(std::format("Error: missing \"player_name\" argument"));
+			res.status = 400;
+			res.set_content("Error: missing \"player_name\" argument", "text/plain");
+			return;
+		}
+
+		AFoxGame* foxGame = UObject::GetInstanceOf<AFoxGame>();
+		if (foxGame) {
+			// TODO: Get player's AFoxPC
+			foxGame->AdminKickPlayer(player_pc);
+			res.status = 200;
+			res.set_content("OK", "text/plain");
+			return;
+		}
+
+		else {
+			logWarn("No instance of AFoxGame was found");
+			res.status = 500;
+			res.set_content("No instance of AFoxGame was found", "text/plain");
+			return;
+		}
+	}
+	*/
+
+	/*
+	if (command == std::format("slay")) {
+		logDebug(std::format("Client {0} hit endpoint {1}", req.remote_addr, command));
+		std::string name = req.get_param_value("player_name");
+
+		if (name.empty()) {
+			logDebug(std::format("Error: missing \"player_name\" argument"));
+			res.status = 400;
+			res.set_content("Error: missing \"player_name\" argument", "text/plain");
+			return;
+		}
+
+		AFoxGame* foxGame = UObject::GetInstanceOf<AFoxGame>();
+		if (foxGame) {
+			// TODO: Get player's AFoxPawn
+			player_pawn->Suicide();
+			res.status = 200;
+			res.set_content("OK", "text/plain");
+			return;
+		}
+
+		else {
+			logWarn("No instance of AFoxGame was found");
+			res.status = 500;
+			res.set_content("No instance of AFoxGame was found", "text/plain");
+			return;
+		}
+	}
+	*/
+
 	else {
 		logWarn(std::format("Client {0} hit endpoint {1} but it does not exist", req.remote_addr, command));
 		res.status = 501;
 		res.set_content(std::format("Command {0} doesn't exist in this server-util version", command), "text/plain");
+		return;
 	}
 }
