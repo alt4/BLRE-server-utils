@@ -44,9 +44,26 @@ struct ServerHacks {
 	bool disableOnMatchIdle;
 };
 
+struct ServerMutators {
+	/* These don't seem to work for some reason - investigate later I guess
+	bool DisableDepots;
+	bool DisableHRV;
+	bool DisableHeadShots;
+	bool StockLoadout;
+	bool DisablePrimaries;
+	bool DisableSecondaries;
+	bool DisableGear;
+	bool DisableTacticalGear;
+	bool DisableHealthRegen;
+	bool DisableElementalAmmo;
+	*/
+	bool HeadshotsOnly;
+};
+
 struct ServerConfig {
 	ServerProperties properties;
 	ServerHacks hacks;
+	ServerMutators mutators;
 
 	char RandomBotNamesFString[NUM_BOT_NAMES * sizeof(FString)];
 	char RandomBotNamesFStringBackup[NUM_BOT_NAMES * sizeof(FString)];
@@ -273,6 +290,21 @@ static json defaultConfigJson(){
 	defaultConfig["properties"]["GoalScore"] = 3000;
 
 	defaultConfig["hacks"]["disableOnMatchIdle"] = 1;
+
+	/* These don't seem to work for some reason - investigate later I guess
+	defaultConfig["mutators"]["DisableDepots"] = 0;
+	defaultConfig["mutators"]["DisableHRV"] = 0;
+	defaultConfig["mutators"]["DisableHeadShots"] = 0;
+	defaultConfig["mutators"]["StockLoadout"] = 0;
+	defaultConfig["mutators"]["DisablePrimaries"] = 0;
+	defaultConfig["mutators"]["DisableSecondaries"] = 0;
+	defaultConfig["mutators"]["DisableGear"] = 0;
+	defaultConfig["mutators"]["DisableTacticalGear"] = 0;
+	defaultConfig["mutators"]["DisableHealthRegen"] = 0;
+	defaultConfig["mutators"]["DisableElementalAmmo"] = 0;
+	*/
+	defaultConfig["mutators"]["HeadshotsOnly"] = 0;
+
 	return defaultConfig;
 }
 
@@ -319,6 +351,21 @@ static ServerConfig serverConfigFromJson(json input){
 		config.properties.GoalScore = getJsonValue(input, defaultConfig, "properties", "GoalScore");
 
 		config.hacks.disableOnMatchIdle = (int)getJsonValue(input, defaultConfig, "hacks", "disableOnMatchIdle");
+
+		/* These don't seem to work for some reason - investigate later I guess
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "HeadshotsOnly");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "DisableDepots");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "DisableHRV");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "DisableHeadShots");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "StockLoadout");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "DisablePrimaries");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "DisableSecondaries");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "DisableGear");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "DisableTacticalGear");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "DisableHealthRegen");
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "DisableElementalAmmo");
+		*/
+		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "HeadshotsOnly");
 	}catch(json::exception e){
 		throw(e);
 	}
@@ -376,6 +423,20 @@ static void applyParametersToGameObject(AFoxGame *game, const ServerConfig &conf
 		game->FGRI->RemainingMinute = game->TimeLimit;
 		game->FGRI->RemainingTime = game->TimeLimit * 60;
 	}
+	// More mutators in Engine_classes.h line 2382
+	/* These don't seem to work for some reason - investigate later I guess
+	game->FGRI->SetMutatorEnabled(3, config.mutators.DisableDepots);
+	game->FGRI->SetMutatorEnabled(4, config.mutators.DisableHRV);
+	game->FGRI->SetMutatorEnabled(6, config.mutators.DisableHeadShots);
+	game->FGRI->SetMutatorEnabled(7, config.mutators.StockLoadout);
+	game->FGRI->SetMutatorEnabled(8, config.mutators.DisablePrimaries);
+	game->FGRI->SetMutatorEnabled(9, config.mutators.DisableSecondaries);
+	game->FGRI->SetMutatorEnabled(10, config.mutators.DisableGear);
+	game->FGRI->SetMutatorEnabled(11, config.mutators.DisableTacticalGear);
+	game->FGRI->SetMutatorEnabled(12, config.mutators.DisableHealthRegen);
+	game->FGRI->SetMutatorEnabled(13, config.mutators.DisableElementalAmmo);
+	*/
+	game->FGRI->SetMutatorEnabled(14, config.mutators.HeadshotsOnly);
 }
 
 static void cacheServerInfo(){
