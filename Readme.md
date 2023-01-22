@@ -56,6 +56,7 @@ after first run, `<blr>/FoxGame/Config/BLRevive/server_utils/server_config.json`
 | properties/TimeLimit | (int) minutes a round should last, only applies when playlist is used, non playlist should use the launch parameter instead |
 | properties/GoalScore | (int) score required to win, could mean very different things in different modes, for example it means the individual score to win in DM, and number of kills in TDM |
 | hacks/disableOnMatchIdle | (int) set to non 0 to disable intermission idle kick |
+| mutators/HeadshotsOnly | (int) set to non 0 to enable the `HeadshotsOnly` mutator |
 
 ## server information query
 
