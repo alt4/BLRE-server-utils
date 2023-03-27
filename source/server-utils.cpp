@@ -56,6 +56,9 @@ struct ServerMutators {
 	bool DisableHealthRegen;
 	bool DisableElementalAmmo;
 	bool HeadshotsOnly;
+
+	float StaminaModifier;
+	float HealthModifier;
 };
 
 struct ServerConfig {
@@ -300,6 +303,9 @@ static json defaultConfigJson(){
 	defaultConfig["mutators"]["DisableHealthRegen"] = 0;
 	defaultConfig["mutators"]["DisableElementalAmmo"] = 0;
 	defaultConfig["mutators"]["HeadshotsOnly"] = 0;
+	
+	defaultConfig["mutators"]["StaminaModifier"] = 1.0;
+	defaultConfig["mutators"]["HealthModifier"] = 1.0;
 
 	return defaultConfig;
 }
@@ -359,6 +365,9 @@ static ServerConfig serverConfigFromJson(json input){
 		config.mutators.DisableHealthRegen = (int)getJsonValue(input, defaultConfig, "mutators", "DisableHealthRegen");
 		config.mutators.DisableElementalAmmo = (int)getJsonValue(input, defaultConfig, "mutators", "DisableElementalAmmo");
 		config.mutators.HeadshotsOnly = (int)getJsonValue(input, defaultConfig, "mutators", "HeadshotsOnly");
+
+		config.mutators.StaminaModifier = (float)getJsonValue(input, defaultConfig, "mutators", "StaminaModifier");
+		config.mutators.HealthModifier = (float)getJsonValue(input, defaultConfig, "mutators", "HealthModifier");
 
 	}catch(json::exception e){
 		throw(e);
@@ -430,6 +439,10 @@ static void applyParametersToGameObject(AFoxGame *game, const ServerConfig &conf
 	game->FGRI->SetMutatorEnabled(13, config.mutators.DisableElementalAmmo);
 	game->FGRI->SetMutatorEnabled(14, config.mutators.HeadshotsOnly);
 	game->FGRI->ApplyMutators(); // Not sure this actually does anything, but it does no harm
+
+	// Custom mutators
+	game->FGRI->StaminaModifier = config.mutators.StaminaModifier;
+	game->FGRI->HealthModifier = config.mutators.HealthModifier;
 }
 
 static void cacheServerInfo(){
