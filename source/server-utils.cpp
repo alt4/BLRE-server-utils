@@ -577,6 +577,20 @@ static void updateServerInfo(AFoxGame* game)
 	serverInfo["RemainingTime"] = game->FGRI->RemainingTime;
 	serverInfo["MaxPlayers"] = game->FGRI->MaxPlayers;
 
+	serverInfo["Mutators"]["DisableDepots"] = game->FGRI->IsMutatorEnabled(3);
+	serverInfo["Mutators"]["DisableHRV"] = game->FGRI->IsMutatorEnabled(4);
+	serverInfo["Mutators"]["DisableHeadShots"] = game->FGRI->IsMutatorEnabled(6);
+	serverInfo["Mutators"]["StockLoadout"] = game->FGRI->IsMutatorEnabled(7);
+	serverInfo["Mutators"]["DisablePrimaries"] = game->FGRI->IsMutatorEnabled(8);
+	serverInfo["Mutators"]["DisableSecondaries"] = game->FGRI->IsMutatorEnabled(9);
+	serverInfo["Mutators"]["DisableGear"] = game->FGRI->IsMutatorEnabled(10);
+	serverInfo["Mutators"]["DisableTacticalGear"] = game->FGRI->IsMutatorEnabled(11);
+	serverInfo["Mutators"]["DisableHealthRegen"] = game->FGRI->IsMutatorEnabled(12);
+	serverInfo["Mutators"]["DisableElementalAmmo"] = game->FGRI->IsMutatorEnabled(13);
+	serverInfo["Mutators"]["HeadshotsOnly"] = game->FGRI->IsMutatorEnabled(14);
+	serverInfo["Mutators"]["StaminaModifier"] = game->FGRI->StaminaModifier;
+	serverInfo["Mutators"]["HealthModifier"] = game->FGRI->HealthModifier;
+
 	ReleaseMutex(serverInfoMutex);
 }
 
