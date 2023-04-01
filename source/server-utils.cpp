@@ -61,10 +61,18 @@ struct ServerMutators {
 	float HealthModifier;
 };
 
+struct ServerStatsUpload {
+	bool Enabled;
+	std::string ServerID;
+	std::string Url;
+	std::string Notes;
+};
+
 struct ServerConfig {
 	ServerProperties properties;
 	ServerHacks hacks;
 	ServerMutators mutators;
+	ServerStatsUpload statsUpload;
 
 	char RandomBotNamesFString[NUM_BOT_NAMES * sizeof(FString)];
 	char RandomBotNamesFStringBackup[NUM_BOT_NAMES * sizeof(FString)];
@@ -150,6 +158,20 @@ extern "C" __declspec(dllexport) void ModuleThread()
 			applyRecurringHacks(game, serverConfig);
 			applyParametersToGameObject(game, serverConfig);
 			updateServerInfo(game);
+		},
+		true,
+		});
+	logDebug("registered handler for event * UpdateGameSettings");
+#endif
+#if 1
+	eventManager->RegisterHandler({
+		Events::ID("*", "EndGame"),
+		[=](Events::Info info) {
+			AFoxGame* game = (AFoxGame*)info.Object;
+			if (serverConfig.statsUpload.Enabled)
+			{ 
+				applyRecurringHacks(game, serverConfig);
+			}
 		},
 		true,
 		});
@@ -307,6 +329,11 @@ static json defaultConfigJson(){
 	defaultConfig["mutators"]["StaminaModifier"] = 1.0;
 	defaultConfig["mutators"]["HealthModifier"] = 1.0;
 
+	defaultConfig["statsUpload"]["Enabled"] = false;
+	defaultConfig["statsUpload"]["ServerID"] = "Unnammed server";
+	defaultConfig["statsUpload"]["Url"] = "";
+	defaultConfig["statsUpload"]["Notes"] = "";
+
 	return defaultConfig;
 }
 
@@ -368,6 +395,11 @@ static ServerConfig serverConfigFromJson(json input){
 
 		config.mutators.StaminaModifier = (float)getJsonValue(input, defaultConfig, "mutators", "StaminaModifier");
 		config.mutators.HealthModifier = (float)getJsonValue(input, defaultConfig, "mutators", "HealthModifier");
+
+		config.statsUpload.Enabled = (bool)getJsonValue(input, defaultConfig, "statsUpload", "Enabled");
+		config.statsUpload.ServerID = (std::string)getJsonValue(input, defaultConfig, "statsUpload", "ServerID");
+		config.statsUpload.Url = (std::string)getJsonValue(input, defaultConfig, "statsUpload", "Url");
+		config.statsUpload.Notes = (std::string)getJsonValue(input, defaultConfig, "statsUpload", "Notes");
 
 	}catch(json::exception e){
 		throw(e);
@@ -609,4 +641,18 @@ static void applyOneshotHacks(const ServerConfig &config){
 
 static void applyRecurringHacks(AFoxGame *game, const ServerConfig &config){
 	// place holder
+}
+
+static void uploadLeaderboard(AFoxGame* game, const ServerConfig& config) {
+	std::smatch urlMatches;
+	// Stolen here
+	// https://regex101.com/r/ibVctF/1
+	std::regex urlRegex("^(https?):\/\/(([^:\/?#]*)(?:\:([0-9]+))?)([\/]{0,1}[^?#]*)(\?[^#]*|)(#.*|)$");
+	std::regex_search(serverConfig.statsUpload.Url, urlMatches, urlRegex);
+	std::string scheme = urlMatches[1];
+	std::string authority = urlMatches[2];
+	std::string host = scheme + "://" + authority;
+	httplib::Client cli(host);
+	auto res = cli.Post("/post", "text", "application/json");
+	res->status;
 }
